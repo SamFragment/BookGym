@@ -20,9 +20,9 @@
                        HorizontalAlignment="Center"
                        Margin="0,0,0,10"/>
 
-            <Image Source="spartan.png"
+            <!-- <Image Source="spartan.png"
                    Stretch="Uniform"
-                   HorizontalAlignment="Center"/>
+                   HorizontalAlignment="Center"/> -->
 
             <!-- Target Section -->
             <Border Background="#1E1E1E"
@@ -40,30 +40,34 @@
                                HorizontalAlignment="Center"
                                Margin="0,0,0,10"/>
 
-                    <StackPanel Orientation="Horizontal" Margin="0,5">
+                    <StackPanel Orientation="Horizontal" Margin="0,5" VerticalAlignment="Center">
                         <TextBlock Text="Class: "
                                    Foreground="#00FF00"
                                    FontSize="14"
                                    FontFamily="Consolas"
-                                   FontWeight="Bold"/>
-                        <TextBlock x:Name="TargetClassName"
-                                   Text="Fitness Class"
-                                   Foreground="#FFFFFF"
-                                   FontSize="14"
-                                   FontFamily="Consolas"/>
+                                   FontWeight="Bold"
+                                   VerticalAlignment="Center"/>
+                        <TextBox x:Name="TargetClassName"
+                                 Text="Circuit Training"
+                                 Foreground="#FFFFFF"
+                                 Background="#2E2E2E"
+                                 BorderBrush="#00FF00"
+                                 BorderThickness="1"
+                                 FontSize="14"
+                                 FontFamily="Consolas"
+                                 Margin="5,0,0,0"
+                                 Padding="5"/>
                     </StackPanel>
 
-                    <StackPanel Orientation="Horizontal" Margin="0,5">
+                    <StackPanel Orientation="Horizontal" Margin="0,5" VerticalAlignment="Center">
                         <TextBlock Text="Date: "
                                    Foreground="#00FF00"
                                    FontSize="14"
                                    FontFamily="Consolas"
-                                   FontWeight="Bold"/>
-                        <TextBlock x:Name="TargetDate"
-                                   Text="Thursday 5th Dec"
-                                   Foreground="#FFFFFF"
-                                   FontSize="14"
-                                   FontFamily="Consolas"/>
+                                   FontWeight="Bold"
+                                   VerticalAlignment="Center"/>
+                        <DatePicker x:Name="TargetDate"
+                                    Margin="5,0,0,0"/>
                     </StackPanel>
 
                     <StackPanel Orientation="Horizontal" Margin="0,5">
@@ -96,8 +100,7 @@
                  TextWrapping="Wrap"
                  AcceptsReturn="True"
                  VerticalScrollBarVisibility="Auto"
-                 HorizontalScrollBarVisibility="Auto"
-                 TextChanged="ConsoleOutput_TextChanged"/>
+                 HorizontalScrollBarVisibility="Auto"/>
 
     </Grid>
 </Window>

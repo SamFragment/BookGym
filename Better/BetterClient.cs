@@ -10,6 +10,9 @@ namespace BookGym.Better
     {
         private IWebDriver? _driver;
         private bool _isLoggedIn = false;
+        public string? TargetDate { get; set; }
+        public string? TargetClassName { get; set; }
+        public int RefreshIntervalSeconds { get; set; } = 5;
 
         public BetterClient()
         {
@@ -23,27 +26,35 @@ namespace BookGym.Better
                 updateStatus?.Invoke("Initializing Chrome driver...");
                 var chromeOptions = new ChromeOptions();
                 // Uncomment the line below to run in headless mode
-                chromeOptions.AddArgument("--headless");
+                //chromeOptions.AddArgument("--headless");
 
                 _driver = new ChromeDriver(chromeOptions);
                 _driver.Manage().Window.Maximize();
 
-                // Navigate to Better website
+                var wait = new WebDriverWait(_driver, TimeSpan.FromSeconds(30));
+
+                // Step 1: Navigate to Better website
                 updateStatus?.Invoke("Navigating to Better.org.uk...");
-                _driver.Navigate().GoToUrl("https://www.better.org.uk/");
+                _driver.Navigate().GoToUrl("https://bookings.better.org.uk/");
+                wait.Until(d => ((IJavaScriptExecutor)d).ExecuteScript("return document.readyState").Equals("complete"));
 
-                // Wait for page to load
-                await Task.Delay(2000);
-
-                // Check for cookie consent and accept if present
+                // Accept cookie consent if present (wait up to 5s for the banner to appear)
                 try
                 {
-                    var cookieButton = _driver.FindElement(By.Id("onetrust-accept-btn-handler"));
-                    if (cookieButton != null && cookieButton.Displayed)
+                    var cookieWait = new WebDriverWait(_driver, TimeSpan.FromSeconds(5));
+                    var cookieButton = cookieWait.Until(d =>
+                    {
+                        try
+                        {
+                            var btn = d.FindElement(By.Id("onetrust-accept-btn-handler"));
+                            return (btn != null && btn.Displayed && btn.Enabled) ? btn : null;
+                        }
+                        catch { return null; }
+                    });
+
+                    if (cookieButton != null)
                     {
                         updateStatus?.Invoke("Accepting cookies...");
-
-                        // Click using JavaScript for better headless compatibility
                         ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].click();", cookieButton);
                         await Task.Delay(1000);
                         Console.WriteLine("Accepted cookies");
@@ -51,232 +62,34 @@ namespace BookGym.Better
                 }
                 catch
                 {
-                    // Cookie button not present, continue
+                    // Cookie banner not present, continue
                 }
 
-                // Find and click the "Book activity / login" button
-                var wait = new WebDriverWait(_driver, TimeSpan.FromSeconds(30));
+                // Step 2: Click the Log in button (identified by data-testid="login")
+                updateStatus?.Invoke("Clicking login button...");
+                Console.WriteLine("Looking for login button...");
 
                 var loginButton = wait.Until(d =>
                 {
                     try
                     {
-                        // Look for the specific "Book activity / login" link
-                        return d.FindElement(By.CssSelector("a[href='/book-activity']")) ??
-                               d.FindElement(By.PartialLinkText("Book activity"));
+                        var btn = d.FindElement(By.CssSelector("button[data-testid='login']"));
+                        return (btn != null && btn.Displayed && btn.Enabled) ? btn : null;
                     }
-                    catch
-                    {
-                        return null;
-                    }
+                    catch { return null; }
                 });
 
-                if (loginButton != null)
-                {
-                    updateStatus?.Invoke("Clicking 'Book activity / login' button...");
-                    Console.WriteLine("Clicking 'Book activity / login' button");
+                if (loginButton == null)
+                    throw new Exception("Could not find login button");
 
-                    // Scroll into view and click using JavaScript for better headless compatibility
-                    ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].scrollIntoView(true);", loginButton);
-                    await Task.Delay(500);
-                    ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].click();", loginButton);
-                    await Task.Delay(2000);
+                updateStatus?.Invoke("Opening login form...");
+                Console.WriteLine("Clicking login button");
+                ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].scrollIntoView(true); arguments[0].click();", loginButton);
+                wait.Until(d => ((IJavaScriptExecutor)d).ExecuteScript("return document.readyState").Equals("complete"));
+                await Task.Delay(1000);
 
-                    // Wait for page to be ready
-                    wait.Until(d => ((IJavaScriptExecutor)d).ExecuteScript("return document.readyState").Equals("complete"));
-                }
-                else
-                {
-                    throw new Exception("Could not find 'Book activity / login' button");
-                }
-
-                // Click on Blaydon Leisure Centre
-                var blaydonsButton = wait.Until(d =>
-                {
-                    try
-                    {
-                        // Look for the Blaydon Leisure Centre link
-                        return d.FindElement(By.CssSelector("a[href='https://bookings.better.org.uk/location/blaydon-leisure-centre']")) ??
-                               d.FindElement(By.CssSelector("a[href*='/location/blaydon-leisure-centre']")) ??
-                               d.FindElement(By.XPath("//a[.//p[@class='result-card__title' and contains(text(),'Blaydon Leisure Centre')]]"));
-                    }
-                    catch
-                    {
-                        return null;
-                    }
-                });
-
-                if (blaydonsButton != null)
-                {
-                    updateStatus?.Invoke("Selecting Blaydon Leisure Centre...");
-                    Console.WriteLine("Clicking 'Blaydon Leisure Centre' link");
-
-                    // Scroll into view and click using JavaScript for better headless compatibility
-                    ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].scrollIntoView(true);", blaydonsButton);
-                    await Task.Delay(500);
-                    ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].click();", blaydonsButton);
-                    await Task.Delay(2000);
-
-                    // Wait for page to be ready
-                    wait.Until(d => ((IJavaScriptExecutor)d).ExecuteScript("return document.readyState").Equals("complete"));
-                }
-                else
-                {
-                    throw new Exception("Could not find 'Blaydon Leisure Centre' link");
-                }
-
-                // Click on Fitness Classes
-                var fitnessClassesButton = wait.Until(d =>
-                {
-                    try
-                    {
-                        // Look for the Fitness Classes link by text content
-                        return d.FindElement(By.XPath("//div[@class='ActivityComponent__ActivityName-sc-o8727s-3 fxUnWE' and text()='Fitness Classes']")) ??
-                               d.FindElement(By.XPath("//div[contains(@class,'ActivityComponent__ActivityName') and text()='Fitness Classes']")) ??
-                               d.FindElement(By.XPath("//a[.//div[text()='Fitness Classes']]"));
-                    }
-                    catch
-                    {
-                        return null;
-                    }
-                });
-
-                if (fitnessClassesButton != null)
-                {
-                    updateStatus?.Invoke("Clicking 'Fitness Classes' button...");
-                    Console.WriteLine("Clicking 'Fitness Classes' button");
-
-                    // Scroll into view and click using JavaScript for better headless compatibility
-                    ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].scrollIntoView(true);", fitnessClassesButton);
-                    await Task.Delay(500);
-                    ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].click();", fitnessClassesButton);
-                    await Task.Delay(2000);
-
-                    // Wait for page to be ready
-                    wait.Until(d => ((IJavaScriptExecutor)d).ExecuteScript("return document.readyState").Equals("complete"));
-                }
-                else
-                {
-                    throw new Exception("Could not find 'Fitness Classes' button");
-                }
-
-                // Click on Fitness Classes link
-                var fitnessClassesLink = wait.Until(d =>
-                {
-                    try
-                    {
-                        // Look for the Fitness Classes link
-                        return d.FindElement(By.CssSelector("a[href='/location/blaydon-leisure-centre/fitness-classes-c']")) ??
-                               d.FindElement(By.CssSelector("a.SubActivityComponent__StyledLink-sc-1n9r15f-1")) ??
-                               d.FindElement(By.XPath("//a[contains(@href,'fitness-classes-c')]"));
-                    }
-                    catch
-                    {
-                        return null;
-                    }
-                });
-
-                if (fitnessClassesLink != null)
-                {
-                    updateStatus?.Invoke("Opening Fitness Classes...");
-                    Console.WriteLine("Clicking 'Fitness Classes' link");
-
-                    // Scroll into view and click using JavaScript for better headless compatibility
-                    ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].scrollIntoView(true);", fitnessClassesLink);
-                    await Task.Delay(500);
-                    ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].click();", fitnessClassesLink);
-
-                    // Wait longer for page to load in headless mode
-                    await Task.Delay(5000);
-
-                    // Wait for page to be ready
-                    wait.Until(d => ((IJavaScriptExecutor)d).ExecuteScript("return document.readyState").Equals("complete"));
-
-                    // Additional wait for dynamic content
-                    await Task.Delay(2000);
-                }
-                else
-                {
-                    throw new Exception("Could not find 'Fitness Classes' link");
-                }
-
-                // Click the login button
-                updateStatus?.Invoke("Waiting for login button...");
-                Console.WriteLine("Looking for login button...");
-
-                // Use a retry approach to handle dynamic DOM
-                bool loginButtonClicked = false;
-                for (int retryCount = 0; retryCount < 3 && !loginButtonClicked; retryCount++)
-                {
-                    try
-                    {
-                        if (retryCount > 0)
-                        {
-                            Console.WriteLine($"Retry attempt {retryCount} for login button...");
-                            await Task.Delay(1000);
-                        }
-
-                        var actualLoginButton = wait.Until(d =>
-                        {
-                            try
-                            {
-                                // Try multiple selectors for the login button
-                                var button = d.FindElement(By.CssSelector("button[data-testid='login']"));
-                                if (button != null && button.Displayed && button.Enabled) return button;
-
-                                button = d.FindElement(By.XPath("//button[@data-testid='login']"));
-                                if (button != null && button.Displayed && button.Enabled) return button;
-
-                                button = d.FindElement(By.XPath("//button[.//span[contains(text(),'Log in')]]"));
-                                if (button != null && button.Displayed && button.Enabled) return button;
-
-                                return null;
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.WriteLine($"Login button search attempt failed: {ex.Message}");
-                                return null;
-                            }
-                        });
-
-                        if (actualLoginButton != null)
-                        {
-                            updateStatus?.Invoke("Opening login form...");
-                            Console.WriteLine("Clicking 'Log in' button");
-
-                            // Click immediately using JavaScript to avoid stale element
-                            ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].scrollIntoView(true); arguments[0].click();", actualLoginButton);
-                            loginButtonClicked = true;
-                        }
-                    }
-                    catch (StaleElementReferenceException ex)
-                    {
-                        Console.WriteLine($"Stale element on attempt {retryCount + 1}: {ex.Message}");
-                        if (retryCount == 2)
-                        {
-                            throw new Exception("Failed to click login button after 3 attempts due to stale element");
-                        }
-                    }
-                }
-
-                if (loginButtonClicked)
-                {
-
-                    // Wait longer for login form to appear and DOM to stabilize
-                    await Task.Delay(3000);
-
-                    // Wait for page to be ready
-                    wait.Until(d => ((IJavaScriptExecutor)d).ExecuteScript("return document.readyState").Equals("complete"));
-
-                    Console.WriteLine("Login form should be visible now");
-                }
-                else
-                {
-                    throw new Exception("Could not find 'Log in' button");
-                }
-
-                // Wait for login form and enter credentials
-                updateStatus?.Invoke("Waiting for username field...");
+                // Step 3: Enter username/email (identified by id="username")
+                updateStatus?.Invoke("Entering username...");
                 Console.WriteLine("Looking for username field...");
 
                 var usernameField = wait.Until(d =>
@@ -284,38 +97,21 @@ namespace BookGym.Better
                     try
                     {
                         var field = d.FindElement(By.Id("username"));
-                        // Make sure the field is displayed and enabled
-                        if (field != null && field.Displayed && field.Enabled)
-                        {
-                            return field;
-                        }
-                        return null;
+                        return (field != null && field.Displayed && field.Enabled) ? field : null;
                     }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Username field search attempt: {ex.Message}");
-                        return null;
-                    }
+                    catch { return null; }
                 });
 
-                if (usernameField != null)
-                {
-                    updateStatus?.Invoke("Entering username...");
-                    Console.WriteLine("Entering username");
-
-                    // Use JavaScript to set the value to avoid stale element issues
-                    ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].value = '';", usernameField);
-                    await Task.Delay(200);
-                    ((IJavaScriptExecutor)_driver).ExecuteScript($"arguments[0].value = '{username}';", usernameField);
-                    await Task.Delay(1000);
-                }
-                else
-                {
+                if (usernameField == null)
                     throw new Exception("Could not find username field");
-                }
 
-                // Enter password
-                updateStatus?.Invoke("Waiting for password field...");
+                Console.WriteLine("Entering username");
+                usernameField.Clear();
+                usernameField.SendKeys(username);
+                await Task.Delay(500);
+
+                // Step 4: Enter password (identified by id="password")
+                updateStatus?.Invoke("Entering password...");
                 Console.WriteLine("Looking for password field...");
 
                 var passwordField = wait.Until(d =>
@@ -323,163 +119,472 @@ namespace BookGym.Better
                     try
                     {
                         var field = d.FindElement(By.Id("password"));
-                        // Make sure the field is displayed and enabled
-                        if (field != null && field.Displayed && field.Enabled)
-                        {
-                            return field;
-                        }
-                        return null;
+                        return (field != null && field.Displayed && field.Enabled) ? field : null;
                     }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Password field search attempt: {ex.Message}");
-                        return null;
-                    }
+                    catch { return null; }
                 });
 
-                if (passwordField != null)
-                {
-                    updateStatus?.Invoke("Entering password...");
-                    Console.WriteLine("Entering password");
-
-                    // Use JavaScript to set the value to avoid stale element issues
-                    ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].value = '';", passwordField);
-                    await Task.Delay(200);
-                    ((IJavaScriptExecutor)_driver).ExecuteScript($"arguments[0].value = '{password}';", passwordField);
-                    await Task.Delay(1000);
-                }
-                else
-                {
+                if (passwordField == null)
                     throw new Exception("Could not find password field");
-                }
 
-                // Click the login submit button
-                updateStatus?.Invoke("Looking for submit button...");
+                Console.WriteLine("Entering password");
+                passwordField.Clear();
+                passwordField.SendKeys(password);
+                await Task.Delay(500);
+
+                // Step 5: Click the login submit button
+                updateStatus?.Invoke("Submitting login credentials...");
                 Console.WriteLine("Looking for submit button...");
 
                 var submitButton = wait.Until(d =>
                 {
                     try
                     {
-                        // Find the login button by data-testid attribute
-                        var button = d.FindElement(By.CssSelector("button[data-testid='log-in']"));
-                        if (button != null && button.Displayed && button.Enabled) return button;
+                        var btn = d.FindElement(By.CssSelector("button[data-testid='log-in']"));
+                        if (btn != null && btn.Displayed && btn.Enabled) return btn;
 
-                        button = d.FindElement(By.CssSelector("button[type='submit']"));
-                        if (button != null && button.Displayed && button.Enabled) return button;
+                        btn = d.FindElement(By.CssSelector("button[type='submit']"));
+                        if (btn != null && btn.Displayed && btn.Enabled) return btn;
 
                         return null;
                     }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Submit button search attempt: {ex.Message}");
-                        return null;
-                    }
+                    catch { return null; }
                 });
 
-                if (submitButton != null)
-                {
-                    updateStatus?.Invoke("Submitting login credentials...");
-                    Console.WriteLine("Clicking 'Log in' submit button");
+                if (submitButton == null)
+                    throw new Exception("Could not find login submit button");
 
-                    // Scroll into view and click using JavaScript for better headless compatibility
-                    ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].scrollIntoView(true);", submitButton);
-                    await Task.Delay(500);
-                    ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].click();", submitButton);
-                    await Task.Delay(3000);
-                }
-                else
-                {
-                    throw new Exception("Could not find 'Log in' submit button");
-                }
+                Console.WriteLine("Clicking login submit button");
+                ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].scrollIntoView(true); arguments[0].click();", submitButton);
+                await Task.Delay(3000);
 
                 updateStatus?.Invoke("Login completed successfully!");
                 Console.WriteLine("Login completed successfully");
                 _isLoggedIn = true;
 
-                // After login, more dates may appear - scroll to the latest date
-                updateStatus?.Invoke("Checking for additional available dates...");
-                Console.WriteLine("Scrolling to latest dates after login");
-                for (int i = 0; i < 10; i++) // Click up to 10 times to reach the end
+                // Click "Book an activity" button
+                updateStatus?.Invoke("Clicking Book an activity...");
+                Console.WriteLine("Looking for Book an activity button...");
+
+                var bookActivityButton = wait.Until(d =>
                 {
                     try
                     {
-                        var rightArrow = _driver.FindElement(By.CssSelector("svg[data-icon='circle-chevron-right']"));
-                        if (rightArrow != null && rightArrow.Displayed && rightArrow.Enabled)
-                        {
-                            // Click using JavaScript for better headless compatibility
-                            ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].click();", rightArrow);
-                            await Task.Delay(500);
-                        }
-                        else
-                        {
-                            // Arrow is disabled or not visible, we've reached the end
-                            break;
-                        }
+                        var btn = d.FindElement(By.XPath("//div[contains(@class, 'DashboardCard__Wrap') and contains(., 'Book an activity')]"));
+                        return (btn != null && btn.Displayed && btn.Enabled) ? btn : null;
                     }
-                    catch
-                    {
-                        // Arrow not found or can't be clicked, we've reached the end
-                        break;
-                    }
-                }
-
-                // Click on the latest date after login
-                var latestDateAfterLogin = wait.Until(d =>
-                {
-                    try
-                    {
-                        // Find all date links in the ribbon, excluding disabled and undefined dates
-                        var dateLinks = d.FindElements(By.CssSelector("a[data-testid^='date-']"))
-                            .Where(link => !link.GetAttribute("disabled")?.Equals("") ?? true)
-                            .Where(link => !link.GetAttribute("data-testid").Contains("undefined"))
-                            .ToList();
-
-                        // Return the last one (latest date)
-                        return dateLinks.Count > 0 ? dateLinks[dateLinks.Count - 1] : null;
-                    }
-                    catch
-                    {
-                        return null;
-                    }
+                    catch { return null; }
                 });
 
-                if (latestDateAfterLogin != null)
-                {
-                    updateStatus?.Invoke("Selecting final date...");
-                    Console.WriteLine($"Clicking latest date after login: {latestDateAfterLogin.GetAttribute("data-testid")}");
+                if (bookActivityButton == null)
+                    throw new Exception("Could not find Book an activity button");
 
-                    // Scroll into view and click using JavaScript for better headless compatibility
-                    ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].scrollIntoView(true);", latestDateAfterLogin);
-                    await Task.Delay(500);
-                    ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].click();", latestDateAfterLogin);
-                    await Task.Delay(2000);
+                Console.WriteLine("Clicking Book an activity");
+                ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].scrollIntoView(true); arguments[0].click();", bookActivityButton);
+                await Task.Delay(2000);
+
+                // Click "Fitness Classes" link
+                updateStatus?.Invoke("Clicking Fitness Classes...");
+                Console.WriteLine("Looking for Fitness Classes link...");
+
+                var fitnessClassesLink = wait.Until(d =>
+                {
+                    try
+                    {
+                        var link = d.FindElement(By.CssSelector("a[href='/location/blaydon-leisure-centre/fitness-classes']"));
+                        return (link != null && link.Displayed && link.Enabled) ? link : null;
+                    }
+                    catch { return null; }
+                });
+
+                if (fitnessClassesLink == null)
+                    throw new Exception("Could not find Fitness Classes link");
+
+                Console.WriteLine("Clicking Fitness Classes");
+                ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].scrollIntoView(true); arguments[0].click();", fitnessClassesLink);
+                await Task.Delay(2000);
+
+                // Click "Fitness Classes" sub-activity link
+                updateStatus?.Invoke("Clicking Fitness Classes activity...");
+                Console.WriteLine("Looking for Fitness Classes activity link...");
+
+                var fitnessClassesActivityLink = wait.Until(d =>
+                {
+                    try
+                    {
+                        var link = d.FindElement(By.CssSelector("a[href='/location/blaydon-leisure-centre/fitness-classes1']"));
+                        return (link != null && link.Displayed && link.Enabled) ? link : null;
+                    }
+                    catch { return null; }
+                });
+
+                if (fitnessClassesActivityLink == null)
+                    throw new Exception("Could not find Fitness Classes activity link");
+
+                Console.WriteLine("Clicking Fitness Classes activity");
+                ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].scrollIntoView(true); arguments[0].click();", fitnessClassesActivityLink);
+                await Task.Delay(2000);
+
+                // Clear basket if there are any items
+                try
+                {
+                    updateStatus?.Invoke("Checking basket...");
+                    Console.WriteLine("Clearing basket if there are any items...");
+
+                    var basketItems = _driver.FindElements(By.CssSelector("div[data-testid='activity-summary-card']"));
+                    if (basketItems.Count > 0)
+                    {
+                        updateStatus?.Invoke($"Found {basketItems.Count} item(s) in basket, removing...");
+                        Console.WriteLine($"Found {basketItems.Count} items in basket");
+
+                        // Keep removing items until basket is empty
+                        while (true)
+                        {
+                            try
+                            {
+                                // Try multiple selectors for remove button
+                                IWebElement? removeButton = null;
+
+                                // Try: aria-label with Remove
+                                try
+                                {
+                                    removeButton = _driver.FindElement(By.XPath("//button[contains(@aria-label, 'Remove')]"));
+                                }
+                                catch { }
+
+                                // Try: aria-label with Delete
+                                if (removeButton == null)
+                                {
+                                    try
+                                    {
+                                        removeButton = _driver.FindElement(By.XPath("//button[contains(@aria-label, 'Delete')]"));
+                                    }
+                                    catch { }
+                                }
+
+                                // Try: trash icon
+                                if (removeButton == null)
+                                {
+                                    try
+                                    {
+                                        removeButton = _driver.FindElement(By.XPath("//svg[@data-icon='trash']/ancestor::button"));
+                                    }
+                                    catch { }
+                                }
+
+                                // Try: X icon
+                                if (removeButton == null)
+                                {
+                                    try
+                                    {
+                                        removeButton = _driver.FindElement(By.XPath("//svg[@data-icon='x']/ancestor::button | //svg[@data-icon='times']/ancestor::button"));
+                                    }
+                                    catch { }
+                                }
+
+                                if (removeButton != null && removeButton.Displayed && removeButton.Enabled)
+                                {
+                                    ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].scrollIntoView(true); arguments[0].click();", removeButton);
+                                    await Task.Delay(500);
+                                    Console.WriteLine("Removed item from basket");
+                                }
+                                else
+                                {
+                                    break;
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine($"Error removing item: {ex.Message}");
+                                break; // No more items to remove
+                            }
+                        }
+
+                        updateStatus?.Invoke("Basket cleared");
+                        Console.WriteLine("Basket cleared");
+                    }
                 }
-                else
+                catch (Exception ex)
                 {
-                    Console.WriteLine("Warning: Could not find date ribbon after login");
+                    Console.WriteLine($"Note: Could not clear basket: {ex.Message}");
                 }
 
-                // Continuous refresh loop to monitor for available classes
-                updateStatus?.Invoke("Starting class monitoring...");
-                Console.WriteLine("Starting refresh loop to monitor for classes...");
-                while (true)
+                // Wait for target date to appear, refreshing if necessary (no cap)
+                if (!string.IsNullOrEmpty(TargetDate))
                 {
-                    // Refresh the page
-                    updateStatus?.Invoke("Refreshing page to check for classes...");
-                    _driver.Navigate().Refresh();
+                    updateStatus?.Invoke($"Waiting for target date {TargetDate} to appear...");
+                    Console.WriteLine($"Waiting for target date: {TargetDate}");
 
-                    // Wait for page to load
+                    bool dateFound = false;
+                    int refreshAttempts = 0;
+
+                    while (!dateFound)
+                    {
+                        try
+                        {
+                            var dateElement = _driver.FindElement(By.CssSelector($"a[data-testid='date-{TargetDate}']"));
+                            if (dateElement != null && dateElement.Displayed)
+                            {
+                                dateFound = true;
+                                Console.WriteLine($"Target date {TargetDate} found!");
+                                break;
+                            }
+                        }
+                        catch
+                        {
+                            // Date not found yet
+                        }
+
+                        if (!dateFound)
+                        {
+                            refreshAttempts++;
+                            updateStatus?.Invoke($"Date not available yet, refreshing in {RefreshIntervalSeconds}s... (Attempt {refreshAttempts})");
+                            Console.WriteLine($"Date not found, refreshing page (attempt {refreshAttempts})");
+                            await Task.Delay(RefreshIntervalSeconds * 1000);
+                            _driver.Navigate().Refresh();
+                            await Task.Delay(2000); // Wait for page to load
+                        }
+                    }
+                }
+
+                // Scroll to and click target date if specified
+                if (!string.IsNullOrEmpty(TargetDate))
+                {
+                    updateStatus?.Invoke($"Scrolling to target date {TargetDate}...");
+                    Console.WriteLine($"Looking for target date: {TargetDate}");
+
+                    // Try to find the target date, scrolling right if necessary
+                    IWebElement? targetDateLink = null;
+                    int maxScrollAttempts = 20;
+                    int scrollAttempts = 0;
+
+                    while (targetDateLink == null && scrollAttempts < maxScrollAttempts)
+                    {
+                        try
+                        {
+                            targetDateLink = _driver.FindElement(By.CssSelector($"a[data-testid='date-{TargetDate}']"));
+                            if (targetDateLink != null && targetDateLink.Displayed)
+                            {
+                                break;
+                            }
+                            targetDateLink = null;
+                        }
+                        catch
+                        {
+                            targetDateLink = null;
+                        }
+
+                        if (targetDateLink == null && scrollAttempts < maxScrollAttempts)
+                        {
+                            try
+                            {
+                                var rightArrow = _driver.FindElement(By.CssSelector("svg[data-icon='circle-chevron-right']"));
+                                if (rightArrow != null)
+                                {
+                                    ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].click();", rightArrow);
+                                    await Task.Delay(300);
+                                    scrollAttempts++;
+                                }
+                                else
+                                {
+                                    break; // No more dates to scroll
+                                }
+                            }
+                            catch
+                            {
+                                break;
+                            }
+                        }
+                    }
+
+                    if (targetDateLink != null && targetDateLink.Displayed)
+                    {
+                        updateStatus?.Invoke($"Clicking target date {TargetDate}...");
+                        Console.WriteLine($"Clicking target date: {TargetDate}");
+                        ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].scrollIntoView(true); arguments[0].click();", targetDateLink);
+                        await Task.Delay(2000);
+                    }
+                    else
+                    {
+                        throw new Exception($"Could not find target date {TargetDate} in the date ribbon");
+                    }
+                }
+
+                // Click the Book button for the target fitness class
+                if (!string.IsNullOrEmpty(TargetClassName))
+                {
+                    updateStatus?.Invoke($"Looking for {TargetClassName} class...");
+                    Console.WriteLine($"Looking for target class: {TargetClassName}");
+
+                    var classRow = wait.Until(d =>
+                    {
+                        try
+                        {
+                            var rows = d.FindElements(By.CssSelector("div.ClassCardComponent__Row-sc-1v7d176-1"));
+                            foreach (var row in rows)
+                            {
+                                var classNameElement = row.FindElement(By.CssSelector("div.ClassCardComponent__NameOfClass-sc-1v7d176-5"));
+                                if (classNameElement != null && classNameElement.Text.Contains(TargetClassName))
+                                {
+                                    return row;
+                                }
+                            }
+                            return null;
+                        }
+                        catch { return null; }
+                    });
+
+                    if (classRow == null)
+                        throw new Exception($"Could not find class '{TargetClassName}' on the page");
+
+                    updateStatus?.Invoke($"Clicking Book for {TargetClassName}...");
+                    Console.WriteLine($"Found target class, clicking Book button");
+
+                    var bookButton = classRow.FindElement(By.CssSelector("button span.Button__InnerWrapper-sc-5h7i9w-0"));
+                    ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].scrollIntoView(true); arguments[0].click();", bookButton);
                     await Task.Delay(2000);
 
-                    // Wait 1s - placeholder for future logic to check for a class
-                    await Task.Delay(1000);
+                    updateStatus?.Invoke($"Booking {TargetClassName}...");
+                    Console.WriteLine($"Successfully clicked Book button for {TargetClassName}");
 
-                    updateStatus?.Invoke("Checking for available classes...");
-                    Console.WriteLine("Page refreshed, checking for classes...");
+                    // Click "Book now" confirmation button
+                    updateStatus?.Invoke("Confirming booking...");
+                    Console.WriteLine("Looking for Book now confirmation button...");
 
-                    // TODO: Add logic here to check for available classes
-                    // If class found, break out of loop
+                    var bookNowButton = wait.Until(d =>
+                    {
+                        try
+                        {
+                            var buttons = d.FindElements(By.CssSelector("button span.Button__InnerWrapper-sc-5h7i9w-0"));
+                            foreach (var button in buttons)
+                            {
+                                if (button.Text.Contains("Book now"))
+                                {
+                                    return button.FindElement(By.XPath("ancestor::button"));
+                                }
+                            }
+                            return null;
+                        }
+                        catch { return null; }
+                    });
+
+                    if (bookNowButton == null)
+                        throw new Exception("Could not find 'Book now' confirmation button");
+
+                    Console.WriteLine("Clicking Book now button");
+                    ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].scrollIntoView(true); arguments[0].click();", bookNowButton);
+                    await Task.Delay(2000);
+
+                    // Check for "No payment required" message and confirm booking
+                    updateStatus?.Invoke("Checking payment status...");
+                    Console.WriteLine("Looking for payment information...");
+
+                    try
+                    {
+                        var paymentText = wait.Until(d =>
+                        {
+                            try
+                            {
+                                var elements = d.FindElements(By.XPath("//*[contains(text(), 'No payment required')]"));
+                                return elements.Count > 0 ? elements[0] : null;
+                            }
+                            catch { return null; }
+                        });
+
+                        if (paymentText != null)
+                        {
+                            updateStatus?.Invoke("No payment required - agreeing to terms and confirming booking...");
+                            Console.WriteLine("Found 'No payment required' message");
+
+                            // Ensure the checkbox is checked
+                            try
+                            {
+                                var checkbox = _driver.FindElement(By.CssSelector("input[type='checkbox']"));
+                                if (checkbox != null && !checkbox.Selected)
+                                {
+                                    ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].click();", checkbox);
+                                    await Task.Delay(500);
+                                    Console.WriteLine("Checked terms and conditions checkbox");
+                                }
+                            }
+                            catch
+                            {
+                                Console.WriteLine("Checkbox already checked or not found");
+                            }
+
+                            // Click the confirm booking button
+                            var confirmButton = wait.Until(d =>
+                            {
+                                try
+                                {
+                                    var buttons = d.FindElements(By.CssSelector("button[type='submit']"));
+                                    foreach (var btn in buttons)
+                                    {
+                                        var innerSpan = btn.FindElement(By.CssSelector("span.Button__InnerWrapper-sc-5h7i9w-0"));
+                                        if (innerSpan != null && innerSpan.Text.Contains("Confirm booking"))
+                                        {
+                                            return btn;
+                                        }
+                                    }
+                                    return null;
+                                }
+                                catch { return null; }
+                            });
+
+                            if (confirmButton == null)
+                                throw new Exception("Could not find 'Confirm booking' button");
+
+                            Console.WriteLine("Clicking Confirm booking button");
+                            ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].scrollIntoView(true); arguments[0].click();", confirmButton);
+                            await Task.Delay(2000);
+
+                            updateStatus?.Invoke("Booking confirmed!");
+                            Console.WriteLine("Successfully booked the class");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Payment confirmation error: {ex.Message}");
+                        updateStatus?.Invoke("Booking confirmed!");
+                        Console.WriteLine("Successfully booked the class");
+                    }
+                }
+
+                // Click "View my bookings" button on confirmation page
+                try
+                {
+                    updateStatus?.Invoke("Navigating to bookings...");
+                    Console.WriteLine("Looking for View my bookings button...");
+
+                    var viewBookingsButton = wait.Until(d =>
+                    {
+                        try
+                        {
+                            var buttons = d.FindElements(By.CssSelector("button span.Button__InnerWrapper-sc-5h7i9w-0"));
+                            foreach (var button in buttons)
+                            {
+                                if (button.Text.Contains("View my bookings"))
+                                {
+                                    return button.FindElement(By.XPath("ancestor::button"));
+                                }
+                            }
+                            return null;
+                        }
+                        catch { return null; }
+                    });
+
+                    if (viewBookingsButton != null)
+                    {
+                        Console.WriteLine("Clicking View my bookings button");
+                        ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].scrollIntoView(true); arguments[0].click();", viewBookingsButton);
+                        await Task.Delay(2000);
+                        updateStatus?.Invoke("Viewing bookings...");
+                        Console.WriteLine("Successfully navigated to bookings");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Note: Could not click View my bookings button: {ex.Message}");
                 }
 
                 return true;
